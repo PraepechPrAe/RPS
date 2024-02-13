@@ -17,6 +17,8 @@ contract RPS is CommitReveal{
     uint public numInput = 0;
     mapping (address => uint) public player_idx;
     uint public numReveal = 0;
+    uint public expired_time = 10 minutes;
+    uint public lastEdit_time = block.timestamp;
 
     function addPlayer() public payable {
         require(numPlayer < 2);
@@ -26,6 +28,7 @@ contract RPS is CommitReveal{
         player[numPlayer].choice = 3;
         player_idx[player[numPlayer].addr] = numPlayer;
         numPlayer++;
+        lastEdit_time = block.timestamp;
     }
     
     function hashInput(uint choice, uint salt) public view returns(bytes32){
@@ -37,6 +40,41 @@ contract RPS is CommitReveal{
         commit(hashedInput);
         player[player_idx[msg.sender]].isCommited = true;
         numInput++;
+        lastEdit_time = block.timestamp;
+    }
+
+    function withdrawETH() public {
+        require(numPlayer > 0);
+        uint current_time = block.timestamp;
+        require(current_time > lastEdit_time + expired_time);
+        if(numPlayer == 1){
+            payable(player[0].addr).transfer(reward);
+        }
+        else{
+            if (numInput == 0){
+                payable(player[0].addr).transfer(0);
+                payable(player[1].addr).transfer(0);
+            }
+            else if (numInput == 1){
+                if(player[0].isCommited){
+                    payable(player[0].addr).transfer(reward);
+                }
+                else if (player[1].isCommited){
+                    payable(player[1].addr).transfer(reward);
+                }
+            }
+            else if (numInput == 2){
+                if(commits[player[0].addr].revealed && !commits[player[1].addr].revealed){
+                    payable(player[0].addr).transfer(reward);
+                }
+                else if (commits[player[1].addr].revealed && !commits[player[0].addr].revealed){
+                    payable(player[1].addr).transfer(reward);
+                }
+            }
+        }
+
+        resetParam();
+
     }
 
     function revealChoice(uint answer,uint salt) public {
@@ -44,7 +82,7 @@ contract RPS is CommitReveal{
         require(numInput == 2);
         revealAnswer(bytes32(answer), bytes32(salt));
         numReveal++;
-
+        lastEdit_time = block.timestamp;
         if(numReveal == 2){
             _checkWinnerAndPay();
         }
@@ -68,5 +106,19 @@ contract RPS is CommitReveal{
             account0.transfer(reward / 2);
             account1.transfer(reward / 2);
         }
+        resetParam();
+    }
+
+    function resetParam() private {
+        delete commits[player[0].addr];
+        delete commits[player[1].addr];
+        delete player_idx[player[0].addr];
+        delete player_idx[player[1].addr];
+        delete player[0];
+        delete player[1];
+        reward = 0;
+        numPlayer = 0;
+        numInput = 0;
+        numReveal = 0;
     }
 }
