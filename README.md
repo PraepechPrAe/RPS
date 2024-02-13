@@ -1,5 +1,6 @@
 # Rock, Paper, Scissors (RPS)
 This smart contract, writing with Solidity, allows users to bet on games with fixed rules for winning, losing, and drawing. ETH will be automatically paid to the winner or split in the event of a draw. 
+
 ## Problems
 1. No one wants to go first, because they are afraid of being front-run.
 2. It is difficult to know which account is index 0 or 1.
@@ -21,10 +22,39 @@ Solve the first problem by
 Solve the second problem by mapping the address to index.
 
 ### 3. Solve locking of player's ETH problem.
+Solve the third, fourth and other locking case by provide a expired time (after 10 minutes) and set folllowing rules:
+After 10 minutes
+- If there is only 1 player, the player can refund the ETH.
+- If both players didn't commit there choice, both of them won't receive any ETH.
+- If only 1 player commited, the player who commited will receive all reward.
+- If both players commited, but only 1 revealed. The player who revealed will receive all reward.
+
+Solve the fifth problem by create resetparam() function that can delete all commits, players and other parameters.
+
 ### 4. Make the game more complex by having 7 options: Rock, Water, Air, Paper, Sponge, Scissors, and Fire.
 <img width="303" alt="image" src="https://github.com/PraepechPrAe/RPS/assets/122012803/32b1cbbf-a3ef-4548-996b-cb64356bf721">
 
+0 - Rock, 1 - Water , 2 - Air, 3 - Paper, 4 - Sponge, 5 - Scissors, 6 - Fire
+Using modulo to easily solve the Rock, Water, Air, Paper, Sponge, Scissors, and Fire.
+```sol
+if (p0Choice == p1Choice) {
+            // to split reward
+            account0.transfer(reward / 2);
+            account1.transfer(reward / 2);
+        }
+        else if ((p0Choice + 1) % 7 == p1Choice || (p0Choice + 2) % 7 == p1Choice || (p0Choice + 3) % 7 == p1Choice){
+            // to pay player[1]
+            account1.transfer(reward);
+        }
+        else if ((p1Choice + 1) % 7 == p0Choice || (p1Choice + 2) % 7 == p0Choice || (p1Choice + 3) % 7 == p0Choice){
+            // to pay player[0]
+            account0.transfer(reward);
+        }
+```
+
 ### 5. Show winner-loser case and draw case.
+
+Winner-loser Case
 ![Screenshot 2567-02-13 at 23 55 04](https://github.com/PraepechPrAe/RPS/assets/122012803/8ff90b38-442d-4323-b75d-240972603c4c)
 
 ![Screenshot 2567-02-13 at 23 55 16](https://github.com/PraepechPrAe/RPS/assets/122012803/791f10a9-bada-426b-9447-e96c6d8118a0)
