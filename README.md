@@ -1,65 +1,150 @@
-# Rock, Paper, Scissors (RPS)
+# Rock-Paper-Scissors-Lizard-Spock (RPSLS) Smart Contract
 This smart contract, writing with Solidity, allows users to bet on games with fixed rules for winning, losing, and drawing. ETH will be automatically paid to the winner or split in the event of a draw. 
 
-## Problems
-1. No one wants to go first, because they are afraid of being front-run.
-2. It is difficult to know which account is index 0 or 1.
-3. Player 0's ETH will be locked if no player 1 comes to contribute.
-4. In the case where both players have joined, but only one player has submitted a choice.This will cause the ETH of everyone who contributed to be locked up and no one can withdraw it.
-5. How can this contract be played multiple times without having to redeploy it every time?
+## Overview
+The contract allows two players to participate in a game of RPSLS. Players must commit their choices using a hashed input (commit-reveal mechanism) to prevent front-running. The contract ensures that:
+Only specific allowed accounts can participate.Funds are not locked indefinitely in the contract due to inactivity.Choices are hidden until both players reveal them.The winner is determined based on the RPSLS rules, and rewards are distributed accordingly.
 
-## Tasks
-### 1. Clone RPS GitHub Repository.
-Clone the repository and modify the Solidity code.
+## Key Features
+### 1. Preventing Locked Funds
+The contract ensures that funds are not locked indefinitely in the following scenarios:
+Single Player Joins: If only one player joins and no second player participates, the first player can withdraw their funds after a timeout period.Incomplete Commit/Reveal: If one player fails to commit or reveal their choice, the other player can withdraw the entire reward after the timeout period.
 
-### 2. Solve front-running problems using the commit-reveal process.
-Solve the first problem by 
-- Commit: Each player submits a secret commitment to their choice without revealing it to the other player.
-- Reveal: Both players reveal their choices after both of them commited thier own choice.
-- Validation: The smart contract verifies that the committed choices match the revealed ones.
-- Outcome: Based on the revealed choices and predetermined rules, the contract determines the winner and automatically distributes the ETH accordingly.
-
-Solve the second problem by mapping the address to index.
-
-### 3. Solve locking of player's ETH problem.
-Solve the third, fourth and other locking case by provide a expired time (after 10 minutes) and set folllowing rules:
-After 10 minutes
-- If there is only 1 player, the player can refund the ETH.
-- If both players didn't commit there choice, both of them won't receive any ETH.
-- If only 1 player commited, the player who commited will receive all reward.
-- If both players commited, but only 1 revealed. The player who revealed will receive all reward.
-
-Solve the fifth problem by create resetparam() function that can delete all commits, players and other parameters.
-
-### 4. Make the game more complex by having 7 options: Rock, Water, Air, Paper, Sponge, Scissors, and Fire.
-<img width="303" alt="image" src="https://github.com/PraepechPrAe/RPS/assets/122012803/32b1cbbf-a3ef-4548-996b-cb64356bf721">
-
-0 - Rock, 1 - Water , 2 - Air, 3 - Paper, 4 - Sponge, 5 - Scissors, 6 - Fire
-Using modulo to easily solve the Rock, Water, Air, Paper, Sponge, Scissors, and Fire.
-```sol
-if (p0Choice == p1Choice) {
-            // to split reward
-            account0.transfer(reward / 2);
-            account1.transfer(reward / 2);
+```solidity
+    function withdrawETH() public {
+        require(numPlayer > 0);
+        // uint current_time = block.timestamp;
+        // require(current_time > lastEdit_time + expired_time);
+        require(elapsedMinutes() > expired_time);
+        if(numPlayer == 1){
+            payable(player[0].addr).transfer(reward);
         }
-        else if ((p0Choice + 1) % 7 == p1Choice || (p0Choice + 2) % 7 == p1Choice || (p0Choice + 3) % 7 == p1Choice){
-            // to pay player[1]
-            account1.transfer(reward);
+        else{
+            if (numInput == 0){
+                payable(player[0].addr).transfer(0);
+                payable(player[1].addr).transfer(0);
+            }
+            else if (numInput == 1){
+                if(player[0].isCommited){
+                    payable(player[0].addr).transfer(reward);
+                }
+                else if (player[1].isCommited){
+                    payable(player[1].addr).transfer(reward);
+                }
+            }
+            else if (numInput == 2){
+                if(commits[player[0].addr].revealed && !commits[player[1].addr].revealed){
+                    payable(player[0].addr).transfer(reward);
+                }
+                else if (commits[player[1].addr].revealed && !commits[player[0].addr].revealed){
+                    payable(player[1].addr).transfer(reward);
+                }
+            }
         }
-        else if ((p1Choice + 1) % 7 == p0Choice || (p1Choice + 2) % 7 == p0Choice || (p1Choice + 3) % 7 == p0Choice){
-            // to pay player[0]
-            account0.transfer(reward);
+        resetParam();
+    }
+```
+Timeout Mechanism: The elapsedMinutes() function ensures that players can withdraw funds only after the specified timeout (expired_time).
+
+### 2. Hiding Choices with Commit-Reveal
+To prevent front-running (where one player waits to see the other's choice before making their own), the contract uses a commit-reveal mechanism. Players first commit their choice as a hashed value and later reveal it along with a salt.
+#### Commit Phrase:
+```solidity
+    function input(bytes32 hashedInput) public  {
+        require(numPlayer == 2);
+        commit(hashedInput);
+        player[player_idx[msg.sender]].isCommited = true;
+        numInput++;
+        // lastEdit_time = block.timestamp;
+        setStartTime();
+    }
+```
+Players submit a hashed input (hashedInput) generated using their choice and a random salt.The commit function (from CommitReveal.sol) stores the hash securely.
+
+#### Hash Generation:
+```solidity
+    function hashInput(uint choice, uint salt) public view returns(bytes32){
+        return getSaltedHash(bytes32(choice), bytes32(salt));
+    }
+```
+Players can use this function to generate the hash of their choice and salt before committing.
+
+#### Reveal Phase:
+```solidity
+    function revealChoice(uint answer,uint salt) public {
+        require(numPlayer == 2);
+        require(numInput == 2);
+        revealAnswer(bytes32(answer), bytes32(salt));
+        player[player_idx[msg.sender]].choice = answer;
+        numReveal++;
+        // lastEdit_time = block.timestamp;
+        setStartTime();
+        if(numReveal == 2){
+            _checkWinnerAndPay();
         }
+    }
+```
+Players reveal their choice (answer) and salt, which is verified against the committed hash.The revealAnswer function (from CommitReveal.sol) ensures the revealed values match the committed hash.
+
+### 3. Handling Delays and Inactivity
+The contract handles delays caused by incomplete player participation:
+If only one player joins, they can withdraw their funds after the timeout.If one player fails to commit or reveal their choice, the other player can claim the reward after the timeout.
+```solidity
+    function withdrawETH() public {
+        require(numPlayer > 0);
+        // uint current_time = block.timestamp;
+        // require(current_time > lastEdit_time + expired_time);
+        require(elapsedMinutes() > expired_time);
+        if(numPlayer == 1){
+            payable(player[0].addr).transfer(reward);
+        }
+        else{
+            if (numInput == 0){
+                payable(player[0].addr).transfer(0);
+                payable(player[1].addr).transfer(0);
+            }
+            else if (numInput == 1){
+                if(player[0].isCommited){
+                    payable(player[0].addr).transfer(reward);
+                }
+                else if (player[1].isCommited){
+                    payable(player[1].addr).transfer(reward);
+                }
+            }
+            else if (numInput == 2){
+                if(commits[player[0].addr].revealed && !commits[player[1].addr].revealed){
+                    payable(player[0].addr).transfer(reward);
+                }
+                else if (commits[player[1].addr].revealed && !commits[player[0].addr].revealed){
+                    payable(player[1].addr).transfer(reward);
+                }
+            }
+        }
+        resetParam();
+    }
 ```
 
-### 5. Show winner-loser case and draw case.
+### 4. Reveal and Determining the Winner
+Once both players reveal their choices, the contract determines the winner based on the RPSLS rules:  
+Rock beats Scissors and Lizard  
+Paper beats Rock and Spock  
+Scissors beats Paper and Lizard  
+Lizard beats Paper and Spock  
+Spock beats Rock and Scissors
 
-Winner-loser Case
-![Screenshot 2567-02-13 at 23 55 04](https://github.com/PraepechPrAe/RPS/assets/122012803/8ff90b38-442d-4323-b75d-240972603c4c)
+0 - Rock, 1 - Paper , 2 - Scissors, 3 - Lizard, 4 - Spock
 
-![Screenshot 2567-02-13 at 23 55 16](https://github.com/PraepechPrAe/RPS/assets/122012803/791f10a9-bada-426b-9447-e96c6d8118a0)
-
-Draw Case
-![Screenshot 2567-02-13 at 23 57 30](https://github.com/PraepechPrAe/RPS/assets/122012803/db69f14b-ebcb-4924-b3c6-c2ac6039c8dd)
-
-![Screenshot 2567-02-13 at 23 57 39](https://github.com/PraepechPrAe/RPS/assets/122012803/04cdd399-d5f5-409d-aff9-c663e81518ad)
+```sol
+    if (p0Choice == p1Choice) {
+        // Tie case: Split the reward
+        account0.transfer(reward / 2);
+        account1.transfer(reward / 2);
+    } else if ((p0Choice - p1Choice + 5) % 5 == 1 || (p0Choice - p1Choice + 5) % 5 == 3) {
+        // Player 0 wins
+        account0.transfer(reward);
+    } else {
+        // Player 1 wins
+        account1.transfer(reward);
+    }
+```
+The modulo operation (p0Choice - p1Choice + 5) % 5 determines the winner based on the RPSLS rules.Rewards are distributed to the winner, or split in case of a tie.
