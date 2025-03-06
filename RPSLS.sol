@@ -27,8 +27,18 @@ contract RPS is CommitReveal, TimeUnit{
         0x78731D3Ca6b7E34aC0F824c42a7cC18A495cabaB
     ];
 
+    function isAllowedPlayer(address _player) public view returns(bool){
+        for(uint i = 0; i < allowedPlayers.length; i++){
+            if(allowedPlayers[i] == _player){
+                return true;
+            }
+        }
+        return false;
+    }
+
     function addPlayer() public payable {
         require(numPlayer < 2);
+        require(isAllowedPlayer(msg.sender));
          if (numPlayer > 0) {
             require(msg.sender != player[0].addr);
         }
