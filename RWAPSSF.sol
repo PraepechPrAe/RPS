@@ -3,10 +3,11 @@
 pragma solidity >=0.7.0 <0.9.0;
 
 import "./CommitReveal.sol";
+import "./TimeUnit.sol";
 
-contract RPS is CommitReveal{
+contract RPS is CommitReveal, TimeUnit{
     struct Player {
-        uint choice; // 0 - Rock, 1 - Water , 2 - Air, 3 - Paper, 4 - Sponge, 5 - Scissors, 6 - Fire
+        uint choice; // 0 - Rock, 1 - Paper , 2 - Scissors, 3 - Lizard, 4 - Spock
         bytes32 hashedInput;
         address addr;
         bool isCommited;
@@ -18,17 +19,20 @@ contract RPS is CommitReveal{
     mapping (address => uint) public player_idx;
     uint public numReveal = 0;
     uint public expired_time = 10 minutes;
-    uint public lastEdit_time = block.timestamp;
+
 
     function addPlayer() public payable {
         require(numPlayer < 2);
+         if (numPlayer > 0) {
+            require(msg.sender != player[0].addr);
+        }
         require(msg.value == 1 ether);
         reward += msg.value;
         player[numPlayer].addr = msg.sender;
-        player[numPlayer].choice = 3;
+        player[numPlayer].choice = 5;
         player_idx[player[numPlayer].addr] = numPlayer;
         numPlayer++;
-        lastEdit_time = block.timestamp;
+        setStartTime();
     }
     
     function hashInput(uint choice, uint salt) public view returns(bytes32){
@@ -40,13 +44,15 @@ contract RPS is CommitReveal{
         commit(hashedInput);
         player[player_idx[msg.sender]].isCommited = true;
         numInput++;
-        lastEdit_time = block.timestamp;
+        // lastEdit_time = block.timestamp;
+        setStartTime();
     }
 
     function withdrawETH() public {
         require(numPlayer > 0);
-        uint current_time = block.timestamp;
-        require(current_time > lastEdit_time + expired_time);
+        // uint current_time = block.timestamp;
+        // require(current_time > lastEdit_time + expired_time);
+        require(elapsedMinutes() > expired_time);
         if(numPlayer == 1){
             payable(player[0].addr).transfer(reward);
         }
@@ -81,7 +87,8 @@ contract RPS is CommitReveal{
         revealAnswer(bytes32(answer), bytes32(salt));
         player[player_idx[msg.sender]].choice = answer;
         numReveal++;
-        lastEdit_time = block.timestamp;
+        // lastEdit_time = block.timestamp;
+        setStartTime();
         if(numReveal == 2){
             _checkWinnerAndPay();
         }
@@ -93,18 +100,19 @@ contract RPS is CommitReveal{
         address payable account0 = payable(player[0].addr);
         address payable account1 = payable(player[1].addr);
         
+
         if (p0Choice == p1Choice) {
-            // to split reward
-            account0.transfer(reward / 2);
-            account1.transfer(reward / 2);
-        }
-        else if ((p0Choice + 1) % 7 == p1Choice || (p0Choice + 2) % 7 == p1Choice || (p0Choice + 3) % 7 == p1Choice){
-            // to pay player[1]
-            account1.transfer(reward);
-        }
-        else if ((p1Choice + 1) % 7 == p0Choice || (p1Choice + 2) % 7 == p0Choice || (p1Choice + 3) % 7 == p0Choice){
-            // to pay player[0]
-            account0.transfer(reward);
+        // Tie case: Split the reward
+        account0.transfer(reward / 2);
+        account1.transfer(reward / 2);
+        } 
+        else if ((p0Choice - p1Choice + 5) % 5 == 1 || (p0Choice - p1Choice + 5) % 5 == 3) {
+        // Player 0 wins
+        account0.transfer(reward);
+        } 
+        else {
+        // Player 1 wins
+        account1.transfer(reward);
         }
         resetParam();
     }
