@@ -132,6 +132,9 @@ Scissors beats Paper and Lizard
 Lizard beats Paper and Spock  
 Spock beats Rock and Scissors
 
+![RPSLS](https://github.com/user-attachments/assets/4bbb519a-ecd8-4573-bd6a-380595dd2230)
+
+
 0 - Rock, 1 - Paper , 2 - Scissors, 3 - Lizard, 4 - Spock
 
 ```sol
